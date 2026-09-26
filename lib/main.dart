@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'cart_page.dart';
+
 void main() {
   runApp(const MyApp());
 }
@@ -20,15 +22,17 @@ class Produk {
   final String nama;
   final String deskripsi;
   final String harga;
-  final String gambar;
-  final Color warna; // warna placeholder foto produk
+  final Color warna; // warna placeholder foto produk (fallback jika asset gagal dimuat)
+  final String asset; // path gambar di folder assets/products
+  final bool diskon; // true = tampilkan label "Diskon" di foto
 
   const Produk({
     required this.nama,
     required this.deskripsi,
     required this.harga,
-    required this.gambar,
     required this.warna,
+    required this.asset,
+    this.diskon = false,
   });
 }
 
@@ -46,36 +50,37 @@ const List<Produk> daftarProduk = [
     nama: 'Kemeja Flanel Kotak',
     deskripsi: 'Size L, kondisi 9/10',
     harga: 'Rp65.000',
-    gambar: 'image/bajuflanel.jpeg',
     warna: Color(0xFFC9B79C),
+    asset: 'image/bajuflanel.jpeg',
   ),
   Produk(
     nama: 'Jaket Denim Oversize',
     deskripsi: 'Size XL, kondisi 8/10',
     harga: 'Rp185.000',
-    gambar: 'image/jaketdenim.jpg',
     warna: Color(0xFF9DB4C9),
+    asset: 'image/jaketdenim.jpg',
+    diskon: true,
   ),
   Produk(
     nama: 'Kaos Band Vintage 90an',
     deskripsi: 'Size M, kondisi 8/10',
     harga: 'Rp95.000',
-    gambar: 'image/kaosband.jpg',
     warna: Color(0xFFB98E86),
+    asset: 'image/kaosband.jpg',
   ),
   Produk(
     nama: 'Celana Cargo Baggy',
     deskripsi: 'Size 32, kondisi 9/10',
     harga: 'Rp120.000',
-    gambar: 'image/celanacargo.jpeg',
     warna: Color(0xFF8FA58E),
+    asset: 'image/celanacargo.jpeg',
   ),
   Produk(
     nama: 'Hoodie Crewneck Polos',
     deskripsi: 'Size L, kondisi 9/10',
     harga: 'Rp110.000',
-    gambar: 'image/hoodiecrewneck.jpeg',
     warna: Color(0xFF7E8AA6),
+    asset: 'image/hoodiecrewneck.jpeg',
   ),
 ];
 
@@ -88,7 +93,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Thrifting by Whotao',
+      title: 'Lapak Thrift',
       theme: ThemeData(
         // Font 'Inter' dari modul. Kalau font belum didaftarkan di pubspec.yaml,
         // Flutter otomatis memakai font bawaan (tidak error).
@@ -99,6 +104,16 @@ class MyApp extends StatelessWidget {
       home: const HomePage(),
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// Navigasi dari HomePage: dipanggil dari bottom nav & tombol "Masukkan Keranjang"
+// ---------------------------------------------------------------------------
+void bukaKeranjang(BuildContext context) {
+  Navigator.push(
+    context,
+    MaterialPageRoute(builder: (context) => const CartPage()),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -115,7 +130,7 @@ class HomePage extends StatelessWidget {
         backgroundColor: kPaper,
         scrolledUnderElevation: 0,
         title: const Text(
-          'Thrifting by Whotao',
+          'Lapak Thrift',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w700,
@@ -183,7 +198,17 @@ class HomePage extends StatelessWidget {
           ),
         ),
       ),
-      bottomNavigationBar: const NavBawah(),
+      bottomNavigationBar: NavBawah(
+        activeIndex: 0,
+        onTap: (index) {
+          // index 0 = Beranda (sudah di halaman ini)
+          // index 1 = Keranjang -> buka halaman baru dengan Navigator.push
+          if (index == 1) {
+            bukaKeranjang(context);
+          }
+          // index 2 = Profil, belum ada halamannya
+        },
+      ),
     );
   }
 }
@@ -304,7 +329,73 @@ class KategoriChip extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
-// Card produk: Container, SizedBox, Row, Expanded, Column, Text, Icon
+// Foto produk: Image + Stack + Positioned (label diskon)
+// Dipakai bersama oleh HomePage dan CartPage.
+// ---------------------------------------------------------------------------
+class FotoProduk extends StatelessWidget {
+  final Produk produk;
+  final double ukuran;
+
+  const FotoProduk({super.key, required this.produk, this.ukuran = 110});
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(6),
+      // Stack menumpuk foto produk (belakang) dengan label diskon (depan).
+      child: Stack(
+        children: [
+          // Image.asset menampilkan gambar dari folder assets/products.
+          // errorBuilder jadi jaring pengaman: kalau file gambar belum
+          // ditambahkan ke pubspec.yaml, tampilan tetap rapi (kotak warna + ikon)
+          // alih-alih aplikasi crash.
+          Image.asset(
+            produk.asset,
+            width: ukuran,
+            height: ukuran,
+            fit: BoxFit.cover,
+            errorBuilder: (context, error, stackTrace) => Container(
+              width: ukuran,
+              height: ukuran,
+              color: produk.warna,
+              alignment: Alignment.center,
+              child: Icon(
+                Icons.checkroom,
+                size: ukuran * 0.4,
+                color: Colors.white,
+                semanticLabel: 'Foto ${produk.nama}',
+              ),
+            ),
+          ),
+          // Positioned menempatkan label "Diskon" di pojok kiri atas foto.
+          if (produk.diskon)
+            Positioned(
+              top: 0,
+              left: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 3,
+                ),
+                color: const Color(0xFFD64545),
+                child: const Text(
+                  'Diskon',
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Card produk: Container, SizedBox, Row, Expanded, Column, Text, Icon, Image
 // ---------------------------------------------------------------------------
 class KartuProduk extends StatelessWidget {
   final Produk produk;
@@ -328,29 +419,7 @@ class KartuProduk extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Foto produk
-            Container(
-              width: 110,
-              height: 120,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: produk.warna,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Image.asset(
-                produk.gambar,
-                width: 110,
-                height: 120,
-                fit: BoxFit.cover,
-                semanticLabel: 'Foto ${produk.nama}',
-                errorBuilder: (context, error, stackTrace) => const Icon(
-                  Icons.checkroom,
-                  size: 48,
-                  color: Colors.white,
-                ),
-              ),
-            ),
+            FotoProduk(produk: produk, ukuran: 110),
             const SizedBox(width: 12),
 
             // Info produk mengisi sisa lebar
@@ -393,24 +462,31 @@ class KartuProduk extends StatelessWidget {
                     ],
                   ),
 
-                  // Tombol "Masukkan Keranjang"
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    decoration: BoxDecoration(
-                      color: kInk,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.shopping_cart, size: 14, color: Colors.white),
-                        SizedBox(width: 6),
-                        Text(
-                          'Masukkan Keranjang',
-                          style: TextStyle(fontSize: 11, color: Colors.white),
-                        ),
-                      ],
+                  // Tombol "Masukkan Keranjang" -> Navigator.push ke CartPage
+                  GestureDetector(
+                    onTap: () => bukaKeranjang(context),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      decoration: BoxDecoration(
+                        color: kInk,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.shopping_cart,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                          SizedBox(width: 6),
+                          Text(
+                            'Masukkan Keranjang',
+                            style: TextStyle(fontSize: 11, color: Colors.white),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
@@ -425,9 +501,13 @@ class KartuProduk extends StatelessWidget {
 
 // ---------------------------------------------------------------------------
 // Navigasi bawah: Container + SafeArea + Padding + Row + Expanded
+// Dipakai bersama oleh HomePage dan CartPage lewat activeIndex & onTap.
 // ---------------------------------------------------------------------------
 class NavBawah extends StatelessWidget {
-  const NavBawah({super.key});
+  final int activeIndex;
+  final ValueChanged<int> onTap;
+
+  const NavBawah({super.key, required this.activeIndex, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -442,20 +522,44 @@ class NavBawah extends StatelessWidget {
           ),
         ],
       ),
-      child: const SafeArea(
+      child: SafeArea(
         top: false,
         child: Padding(
-          padding: EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(vertical: 10),
           child: Row(
             children: [
               Expanded(
-                child: ItemNav(icon: Icons.home, label: 'Beranda', aktif: true),
+                child: GestureDetector(
+                  key: const Key('nav_beranda'),
+                  onTap: () => onTap(0),
+                  child: ItemNav(
+                    icon: Icons.home,
+                    label: 'Beranda',
+                    aktif: activeIndex == 0,
+                  ),
+                ),
               ),
               Expanded(
-                child: ItemNav(icon: Icons.shopping_cart, label: 'Keranjang'),
+                child: GestureDetector(
+                  key: const Key('nav_keranjang'),
+                  onTap: () => onTap(1),
+                  child: ItemNav(
+                    icon: Icons.shopping_cart,
+                    label: 'Keranjang',
+                    aktif: activeIndex == 1,
+                  ),
+                ),
               ),
               Expanded(
-                child: ItemNav(icon: Icons.person, label: 'Profil'),
+                child: GestureDetector(
+                  key: const Key('nav_profil'),
+                  onTap: () => onTap(2),
+                  child: ItemNav(
+                    icon: Icons.person,
+                    label: 'Profil',
+                    aktif: activeIndex == 2,
+                  ),
+                ),
               ),
             ],
           ),
