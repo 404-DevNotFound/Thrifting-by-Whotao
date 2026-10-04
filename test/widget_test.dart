@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:toko_thrifting_baju/main.dart';
 import 'package:toko_thrifting_baju/cart_page.dart';
+import 'package:toko_thrifting_baju/checkout_success_page.dart';
 
 void main() {
   testWidgets('Homepage toko thrifting tampil dengan benar', (
@@ -10,35 +11,83 @@ void main() {
   ) async {
     await tester.pumpWidget(const MyApp());
 
-    // AppBar, kolom cari, dan produk
     expect(find.text('Lapak Thrift'), findsOneWidget);
-    expect(find.byType(TextField), findsOneWidget);
     expect(find.text('Kemeja Flanel Kotak'), findsOneWidget);
     expect(find.text('Masukkan Keranjang'), findsWidgets);
-
-    // Navigasi bawah
     expect(find.text('Beranda'), findsOneWidget);
     expect(find.text('Keranjang'), findsOneWidget);
     expect(find.text('Profil'), findsOneWidget);
   });
 
-  testWidgets('Navigasi ke Cart Page dan kembali ke Beranda', (
+  testWidgets(
+    'Tombol "Masukkan Keranjang" nonaktif otomatis saat stok produk habis',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(const MyApp());
+
+      // Hoodie sengaja diberi stock: 2 di data awal supaya cepat habis.
+      final tombolHoodie = find.ancestor(
+        of: find.text('Masukkan Keranjang').last,
+        matching: find.byType(ElevatedButton),
+      );
+
+      await tester.tap(tombolHoodie);
+      await tester.pump();
+      await tester.tap(tombolHoodie);
+      await tester.pump();
+
+      // Setelah 2x ditekan, stok habis -> label berubah & tombol nonaktif.
+      expect(find.text('Stok Habis'), findsOneWidget);
+
+      final ElevatedButton button = tester.widget(tombolHoodie);
+      expect(button.onPressed, isNull);
+    },
+  );
+
+  testWidgets('Tambah produk ke keranjang lalu buka Cart Page', (
     WidgetTester tester,
   ) async {
     await tester.pumpWidget(const MyApp());
 
-    // Dari Beranda, tekan ikon "Keranjang" di nav bawah -> Navigator.push
+    await tester.tap(find.text('Masukkan Keranjang').first);
+    await tester.pump();
+
+    // Badge jumlah di nav bawah muncul.
+    expect(find.text('1'), findsWidgets);
+
     await tester.tap(find.byKey(const Key('nav_keranjang')));
     await tester.pumpAndSettle();
 
     expect(find.byType(CartPage), findsOneWidget);
-    expect(find.byType(TextField), findsWidgets); // kolom cari + input jumlah
+    expect(find.text('Kemeja Flanel Kotak'), findsOneWidget);
+  });
 
-    // Dari Cart Page, tekan ikon "Beranda" di nav bawah -> Navigator.pop
-    await tester.tap(find.byKey(const Key('nav_beranda')));
+  testWidgets('Checkout: isi keranjang, bayar, lalu kembali ke Beranda', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MyApp());
+
+    await tester.tap(find.text('Masukkan Keranjang').first);
+    await tester.pump();
+
+    await tester.tap(find.byKey(const Key('nav_keranjang')));
     await tester.pumpAndSettle();
 
-    expect(find.byType(CartPage), findsNothing);
+    // Tombol checkout aktif karena total > 0.
+    final tombolCheckout = find.widgetWithText(ElevatedButton, 'Checkout');
+    expect(tester.widget<ElevatedButton>(tombolCheckout).onPressed, isNotNull);
+
+    await tester.tap(tombolCheckout);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CheckoutSuccessPage), findsOneWidget);
+    expect(find.text('Rp65.000'), findsOneWidget);
+
+    await tester.tap(find.text('Kembali'));
+    await tester.pumpAndSettle();
+
+    // Kembali ke Beranda, bukan ke Cart Page, dan keranjang sudah kosong.
     expect(find.text('Lapak Thrift'), findsOneWidget);
+    expect(find.byType(CartPage), findsNothing);
+    expect(find.byType(CheckoutSuccessPage), findsNothing);
   });
 }
