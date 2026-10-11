@@ -1,30 +1,21 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import 'cart_page.dart';
+import 'cart_provider.dart';
 import 'models.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
 // ---------------------------------------------------------------------------
 // Halaman Beranda
-// StatefulWidget karena punya satu state lokal: kata kunci pencarian
-// (searchQuery), diperbarui lewat setState setiap kali pengguna mengetik
-// di KolomCari - persis contoh "State pada TextField" di Modul 4.
-// Data produk & keranjang sendiri TIDAK disimpan di sini, melainkan di
-// MainApp (lihat main.dart) lalu dikirim turun lewat constructor.
+// Tetap StatefulWidget, tapi sekarang HANYA untuk satu state lokal: kata
+// kunci pencarian (searchQuery). Ini sengaja TIDAK dipindah ke CartProvider,
+// karena cuma dipakai di halaman ini saja - bukan data yang perlu dibagi ke
+// halaman lain. Data produk & keranjang diambil dari CartProvider.
 // ---------------------------------------------------------------------------
 class HomePage extends StatefulWidget {
-  final List<Produk> products;
-  final int jumlahKeranjang;
-  final ValueChanged<Produk> onAddToCart;
-  final VoidCallback onOpenCart;
-
-  const HomePage({
-    super.key,
-    required this.products,
-    required this.jumlahKeranjang,
-    required this.onAddToCart,
-    required this.onOpenCart,
-  });
+  const HomePage({super.key});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -35,7 +26,12 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final produkTampil = widget.products.where((produk) {
+    // context.watch<CartProvider>() membuat HomePage otomatis dibangun
+    // ulang setiap kali CartProvider memanggil notifyListeners() (misalnya
+    // stok produk berubah karena ditambah dari halaman lain). Ini
+    // menggantikan cara lama: data dikirim lewat constructor dari MainApp.
+    final cartProvider = context.watch<CartProvider>();
+    final produkTampil = cartProvider.products.where((produk) {
       return produk.nama.toLowerCase().contains(searchQuery);
     }).toList();
 
@@ -69,6 +65,45 @@ class _HomePageState extends State<HomePage> {
                     });
                   },
                 ),
+                const SizedBox(height: 16),
+                const BannerPromo(),
+                const SizedBox(height: 16),
+
+                // Kategori: scroll ke samping
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      for (final kategori in daftarKategori)
+                        Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: KategoriChip(
+                            label: kategori,
+                            aktif: kategori == 'Semua',
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: const [
+                    Text(
+                      'Baru masuk',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: kInk,
+                      ),
+                    ),
+                    Text(
+                      'Lihat semua',
+                      style: TextStyle(fontSize: 12, color: kMuted),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 12),
 
                 if (produkTampil.isEmpty)
@@ -82,11 +117,7 @@ class _HomePageState extends State<HomePage> {
                     ),
                   )
                 else
-                  for (final produk in produkTampil)
-                    KartuProduk(
-                      produk: produk,
-                      onAddToCart: widget.onAddToCart,
-                    ),
+                  for (final produk in produkTampil) KartuProduk(produk: produk),
                 const SizedBox(height: 8),
               ],
             ),
@@ -95,13 +126,14 @@ class _HomePageState extends State<HomePage> {
       ),
       bottomNavigationBar: NavBawah(
         activeIndex: 0,
-        jumlahKeranjang: widget.jumlahKeranjang,
+        jumlahKeranjang: cartProvider.jumlahItemKeranjang,
         onTap: (index) {
-          // index 1 = Keranjang -> buka halaman baru lewat callback dari MainApp
           if (index == 1) {
-            widget.onOpenCart();
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const CartPage()),
+            );
           }
-          // index 2 = Profil, belum ada halamannya
         },
       ),
     );
@@ -109,91 +141,97 @@ class _HomePageState extends State<HomePage> {
 }
 
 // ---------------------------------------------------------------------------
-// Card produk. Tombolnya sekarang ElevatedButton sungguhan (bukan sekadar
-// Container yang digambar manual), supaya bisa memakai pola Modul 4:
-// onPressed: produk.stock > 0 ? () => onAddToCart(produk) : null
-// Saat null, Flutter otomatis menampilkannya abu-abu & tidak bisa ditekan.
+// Card produk. Tombolnya ElevatedButton, mengikuti pola Modul 4:
+// onPressed: produk.stock > 0 ? () => ... : null
+// Bedanya dari versi sebelumnya: tidak lagi menerima callback onAddToCart
+// lewat constructor - langsung memanggil context.read<CartProvider>() saat
+// ditekan.
 // ---------------------------------------------------------------------------
 class KartuProduk extends StatelessWidget {
   final Produk produk;
-  final ValueChanged<Produk> onAddToCart;
 
-  const KartuProduk({
-    super.key,
-    required this.produk,
-    required this.onAddToCart,
-  });
+  const KartuProduk({super.key, required this.produk});
 
   @override
   Widget build(BuildContext context) {
     final habis = produk.stock <= 0;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.all(4),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white,
         border: Border.all(color: kBorder),
         borderRadius: BorderRadius.circular(8),
       ),
       child: SizedBox(
-        height: 48,
+        height: 128,
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            FotoProduk(produk: produk, ukuran: 36, tampilkanLabelHabis: habis),
-            const SizedBox(width: 8),
+            FotoProduk(produk: produk, ukuran: 110, tampilkanLabelHabis: habis),
+            const SizedBox(width: 12),
             Expanded(
-              child: Row(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          produk.nama,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: kInk,
-                          ),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        produk.nama,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: kInk,
                         ),
-                        Text(
-                          formatRupiah(produk.harga),
-                          style: const TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w700,
-                            color: kInk,
-                          ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        produk.deskripsi,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 11, color: kMuted),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        formatRupiah(produk.harga),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: kInk,
                         ),
-                        if (habis)
-                          const Text(
-                            'Stok Habis',
-                            style: TextStyle(
-                              fontSize: 8,
-                              color: kAlert,
-                            ),
-                          )
-                        else
-                          Text(
-                            'Stok: ${produk.stock}',
-                            style: const TextStyle(
-                              fontSize: 8,
-                              color: kMuted,
-                            ),
-                          ),
-                      ],
-                    ),
+                      ),
+                      Text(
+                        habis ? 'Stok habis' : 'Stok: ${produk.stock}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: habis ? kAlert : kMuted,
+                        ),
+                      ),
+                    ],
                   ),
                   SizedBox(
-                    width: 118,
-                    height: 22,
+                    width: double.infinity,
+                    height: 30,
                     child: ElevatedButton(
+                      // State pada ElevatedButton (Modul 4, hal. 2):
+                      // onPressed bernilai null saat stok habis -> tombol
+                      // otomatis nonaktif.
+                      //
+                      // context.read<CartProvider>() dipakai (bukan watch)
+                      // karena ini di dalam callback, bukan di build():
+                      // read tidak membuat widget ini ikut "berlangganan"
+                      // perubahan, cukup mengambil instance-nya sekali saat
+                      // ditekan.
                       onPressed: produk.stock > 0
-                          ? () => onAddToCart(produk)
+                          ? () => context
+                              .read<CartProvider>()
+                              .tambahKeKeranjang(produk)
                           : null,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: kInk,
@@ -205,9 +243,17 @@ class KartuProduk extends StatelessWidget {
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
-                      child: const Text(
-                        'Masukkan Keranjang',
-                        style: TextStyle(fontSize: 8.5),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.shopping_cart, size: 14),
+                          const SizedBox(width: 6),
+                          Text(
+                            habis ? 'Stok Habis' : 'Masukkan Keranjang',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        ],
                       ),
                     ),
                   ),

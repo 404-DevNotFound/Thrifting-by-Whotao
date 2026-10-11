@@ -1,37 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 
+import 'cart_provider.dart';
+import 'checkout_success_page.dart';
 import 'models.dart';
 import 'theme.dart';
 import 'widgets.dart';
 
 // ---------------------------------------------------------------------------
 // Halaman Keranjang (Cart Page)
-// StatelessWidget: halaman ini sendiri tidak punya state, cuma menampilkan
-// data `cart`/`products` yang dikirim dari MainApp dan meneruskan sentuhan
-// pengguna lewat callback (onQuantityChanged, onRemove, onCheckout).
+// StatelessWidget: halaman ini sendiri tidak punya state sendiri. Dulu
+// `cart`/`products`/callback dikirim lewat constructor dari MainApp,
+// sekarang semuanya diambil langsung dari CartProvider lewat
+// context.watch<CartProvider>() di build() - makanya constructor-nya
+// jadi kosong (cuma `key`).
 // ---------------------------------------------------------------------------
 class CartPage extends StatelessWidget {
-  final List<ItemKeranjang> cart;
-  final List<Produk> products;
-  final void Function(String produkId, int jumlahBaru) onQuantityChanged;
-  final void Function(String produkId) onRemove;
-  final VoidCallback onCheckout;
-
-  const CartPage({
-    super.key,
-    required this.cart,
-    required this.products,
-    required this.onQuantityChanged,
-    required this.onRemove,
-    required this.onCheckout,
-  });
-
-  int get grandTotal => cart.fold(0, (total, item) => total + item.subtotal);
+  const CartPage({super.key});
 
   // Batas atas yang boleh diketik di TextField jumlah: stok produk yang
   // masih tersisa + jumlah yang sudah ada di keranjang untuk produk itu.
-  int _stokMaksimum(ItemKeranjang item) {
+  int _stokMaksimum(ItemKeranjang item, List<Produk> products) {
     final produkAsli = products.firstWhere(
       (p) => p.id == item.produk.id,
       orElse: () => item.produk,
@@ -41,6 +31,13 @@ class CartPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // context.watch supaya CartPage ikut dibangun ulang kalau isi keranjang
+    // berubah (tambah/kurang jumlah, hapus item, dsb).
+    final cartProvider = context.watch<CartProvider>();
+    final cart = cartProvider.cart;
+    final products = cartProvider.products;
+    final grandTotal = cartProvider.grandTotal;
+
     return Scaffold(
       backgroundColor: kPaper,
       appBar: AppBar(
@@ -87,11 +84,15 @@ class CartPage extends StatelessWidget {
                                 key: ValueKey(item.produk.id),
                                 produk: item.produk,
                                 quantity: item.jumlah,
-                                maxQuantity: _stokMaksimum(item),
-                                onQuantityChanged: (jumlahBaru) =>
-                                    onQuantityChanged(
-                                        item.produk.id, jumlahBaru),
-                                onRemove: () => onRemove(item.produk.id),
+                                maxQuantity: _stokMaksimum(item, products),
+                                // context.read (bukan watch) karena ini di
+                                // dalam callback, bukan di build().
+                                onQuantityChanged: (jumlahBaru) => context
+                                    .read<CartProvider>()
+                                    .ubahJumlah(item.produk.id, jumlahBaru),
+                                onRemove: () => context
+                                    .read<CartProvider>()
+                                    .hapusDariKeranjang(item.produk.id),
                               ),
                           ],
                         ),
@@ -103,7 +104,21 @@ class CartPage extends StatelessWidget {
             left: 0,
             right: 0,
             bottom: 0,
-            child: BarTotal(total: grandTotal, onCheckout: onCheckout),
+            child: BarTotal(
+              total: grandTotal,
+              onCheckout: () {
+                // checkout() mengosongkan keranjang di provider & balikin
+                // totalnya. Navigasinya tetap dilakukan di sini (bukan di
+                // provider) karena CartProvider tidak punya BuildContext.
+                final total = context.read<CartProvider>().checkout();
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CheckoutSuccessPage(total: total),
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),

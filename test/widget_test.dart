@@ -1,15 +1,25 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
 import 'package:toko_thrifting_baju/main.dart';
 import 'package:toko_thrifting_baju/cart_page.dart';
+import 'package:toko_thrifting_baju/cart_provider.dart';
 import 'package:toko_thrifting_baju/checkout_success_page.dart';
+import 'package:toko_thrifting_baju/home_page.dart';
+
+Widget buildTestApp() {
+  return ChangeNotifierProvider(
+    create: (context) => CartProvider(),
+    child: const MyApp(),
+  );
+}
 
 void main() {
   testWidgets('Homepage toko thrifting tampil dengan benar', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(buildTestApp());
 
     expect(find.text('Lapak Thrift'), findsOneWidget);
     expect(find.text('Kemeja Flanel Kotak'), findsOneWidget);
@@ -22,14 +32,20 @@ void main() {
   testWidgets(
     'Tombol "Masukkan Keranjang" nonaktif otomatis saat stok produk habis',
     (WidgetTester tester) async {
-      await tester.pumpWidget(const MyApp());
+      await tester.pumpWidget(buildTestApp());
 
       // Hoodie sengaja diberi stock: 2 di data awal supaya cepat habis.
-      final tombolHoodie = find.ancestor(
-        of: find.text('Masukkan Keranjang').last,
+      final kartuHoodie = find.ancestor(
+        of: find.text('Hoodie Crewneck Polos'),
+        matching: find.byType(KartuProduk),
+      );
+      final tombolHoodie = find.descendant(
+        of: kartuHoodie,
         matching: find.byType(ElevatedButton),
       );
 
+      await tester.ensureVisible(tombolHoodie);
+      await tester.pumpAndSettle();
       await tester.tap(tombolHoodie);
       await tester.pump();
       await tester.tap(tombolHoodie);
@@ -46,9 +62,12 @@ void main() {
   testWidgets('Tambah produk ke keranjang lalu buka Cart Page', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(buildTestApp());
 
-    await tester.tap(find.text('Masukkan Keranjang').first);
+    final tombolTambahProduk = find.text('Masukkan Keranjang').first;
+    await tester.ensureVisible(tombolTambahProduk);
+    await tester.pumpAndSettle();
+    await tester.tap(tombolTambahProduk);
     await tester.pump();
 
     // Badge jumlah di nav bawah muncul.
@@ -64,9 +83,12 @@ void main() {
   testWidgets('Checkout: isi keranjang, bayar, lalu kembali ke Beranda', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    await tester.pumpWidget(buildTestApp());
 
-    await tester.tap(find.text('Masukkan Keranjang').first);
+    final tombolTambahProduk = find.text('Masukkan Keranjang').first;
+    await tester.ensureVisible(tombolTambahProduk);
+    await tester.pumpAndSettle();
+    await tester.tap(tombolTambahProduk);
     await tester.pump();
 
     await tester.tap(find.byKey(const Key('nav_keranjang')));

@@ -63,7 +63,7 @@ class BannerPromo extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: double.infinity,
-      height: 40,
+      height: 64,
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: kDenim,
